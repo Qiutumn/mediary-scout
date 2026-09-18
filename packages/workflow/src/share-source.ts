@@ -52,7 +52,12 @@ export function suppliedShareProvider(share: SuppliedShare, title: string, year 
 export function mediaHintFromName(name: string): { query: string; season?: number; year?: number } {
   const season = /(?:\bS(\d{1,2})\b|\bS(\d{1,2})E\d+|第\s*(\d+)\s*季)/i.exec(name);
   const year = /(?:^|[^\d])((?:19|20)\d{2})(?:[^\d]|$)/.exec(name)?.[1];
-  const query = name.replace(/\.(?:mkv|mp4|avi|mov|ts|m2ts|wmv)$/i, "")
+  // Some share titles insert the same Latin letter between Chinese characters.
+  // Require repeated, identical separators so real titles like 阿Q正传 survive.
+  const separators = name.match(/(?<=\p{Script=Han})[a-z](?=\p{Script=Han})/giu) ?? [];
+  const cleanName = separators.length >= 3 && new Set(separators.map(s => s.toLowerCase())).size === 1
+    ? name.replace(/(?<=\p{Script=Han})[a-z](?=\p{Script=Han})/giu, "") : name;
+  const query = cleanName.replace(/\.(?:mkv|mp4|avi|mov|ts|m2ts|wmv)$/i, "")
     .replace(/[._]/g, " ")
     .replace(/\[[^\]]*\]|【[^】]*】/g, " ")
     .split(/\b(?:S\d{1,2}(?:E\d+)?|(?:19|20)\d{2}|2160p|1080p|720p|4K|REMUX|BluRay|WEB[ -]?DL|HDR|HEVC|x26[45])\b|第\s*\d+\s*季/i)[0]!

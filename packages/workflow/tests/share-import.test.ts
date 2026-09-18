@@ -24,6 +24,11 @@ describe("supplied share normalization", () => {
   it("extracts season/year from release names", () => {
     expect(mediaHintFromName("Breaking.Bad.2008.S02E01.1080p.mkv")).toEqual({ query: "Breaking Bad", year: 2008, season: 2 });
   });
+  it("cleans repeated share-title separators without stripping meaningful Latin text", () => {
+    expect(mediaHintFromName("年z会z不z能z停！2 (2026) 4K 60帧 HDR")).toEqual({ query: "年会不能停！2", year: 2026 });
+    expect(mediaHintFromName("阿Q正传 (1981)").query).toBe("阿Q正传");
+    expect(mediaHintFromName("汉a字b混c排").query).toBe("汉a字b混c排");
+  });
 });
 
 async function fixture(paths = ["original S01E01.mkv", "original S01E01.zh.ass"], movie = false) {

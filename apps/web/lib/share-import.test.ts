@@ -37,6 +37,14 @@ describe("share import submission", () => {
     expect(results[0]!.workflowRunId).toBe(results[1]!.workflowRunId);
     expect(await deps.repository.listActiveWorkflowRuns()).toHaveLength(1);
   });
+  it("resolves an obfuscated share title against exact metadata and year", async () => {
+    const deps = await fixture();
+    vi.mocked(deps.preview).mockResolvedValue(["年z会z不z能z停！2 (2026) 4K 60帧 HDR"]);
+    mocks.search.mockResolvedValue([{ tmdbId: 42, mediaType: "movie", title: "年会不能停2！", year: 2026 }]);
+    const result = await importShareUnlocked({ url: "https://pan.quark.cn/s/abc" }, "acct_default", deps);
+    expect(mocks.search).toHaveBeenCalledWith({ query: "年会不能停！2" });
+    expect(result.status).toBe("queued");
+  });
   it("rejects cross-account or incompatible drives before reading the share", async () => {
     const deps = await fixture();
     await expect(importShareUnlocked({ url: "https://pan.quark.cn/s/abc", storageId: "drive" }, "stranger", deps)).rejects.toMatchObject({ status: 409 });
