@@ -92,6 +92,7 @@ export interface WorkflowRunProgress {
 }
 
 export interface WorkflowRun {
+  suppliedShare?: import("./share-source.js").SuppliedShare;
   id: string;
   kind: WorkflowKind;
   status: WorkflowStatus;
@@ -429,6 +430,7 @@ export interface PackageTreeFile {
 
 /** Identity + lifecycle timestamps a runner threads through a persisted workflow run. */
 export interface WorkflowRunMetadata {
+  suppliedShare?: import("./share-source.js").SuppliedShare;
   id: string;
   startedAt: string;
   finishedAt: string | null;

@@ -13,3 +13,8 @@ node_modules
 .DS_Store
 docs
 *.log
+.local
+backups
+private-backups
+DEPLOYMENT.local.md
+docker-compose.override.yml

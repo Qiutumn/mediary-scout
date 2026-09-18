@@ -9,6 +9,7 @@ describe("buildSandboxToolSet onToolCall", () => {
   it("fires onToolCall with the tool name + args BEFORE the sandbox runs, and still returns the result", async () => {
     const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
     const fakeSandbox = {
+      canRenameImportedMedia: () => false,
       searchResources: async (keyword: string) => ({ keyword, candidates: [] }),
     } as unknown as TaskSandbox;
 
@@ -24,6 +25,7 @@ describe("buildSandboxToolSet onToolCall", () => {
 
   it("a throwing onToolCall never breaks the tool execution", async () => {
     const fakeSandbox = {
+      canRenameImportedMedia: () => false,
       searchResources: async (keyword: string) => ({ keyword }),
     } as unknown as TaskSandbox;
 
@@ -37,7 +39,7 @@ describe("buildSandboxToolSet onToolCall", () => {
   });
 
   it("without onToolCall or logging the toolset is returned unwrapped (passthrough)", () => {
-    const fakeSandbox = { searchResources: async () => ({}) } as unknown as TaskSandbox;
+    const fakeSandbox = { canRenameImportedMedia: () => false, searchResources: async () => ({}) } as unknown as TaskSandbox;
     const tools = buildSandboxToolSet(fakeSandbox);
     expect(typeof (tools as Record<string, ExecutableTool>).searchResources!.execute).toBe("function");
   });

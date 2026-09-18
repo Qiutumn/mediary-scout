@@ -50,6 +50,7 @@ Hard-won rules:
 - Residue is classified explicitly and surfaced; never silently leave or silently delete staging contents.`;
 
 export interface TaskAgentPromptOptions {
+  importRename?: boolean;
   /** The user's preferred subtitle language (e.g. "中文"), standing context. */
   preferredLanguage?: string;
   /** This title's per-media-type keyword recipe (from searchProfile/getSearchRecipe). */
@@ -174,8 +175,13 @@ function subtitleSnapshotPointer(options: TaskAgentPromptOptions): string {
   return `\n📋 SUBTITLE SNAPSHOT (字幕活期文档): The system has already pre-searched assrt.net for this title and found ${options.subtitleCandidateCount} subtitle packages. After the video lands, call viewSubtitleSnapshot() (free, read-only) and follow the "subtitle" skill section — pick ONE package, transferSubtitle it, renameSubtitle to match the video. Subtitles are a SOFT goal: never let them block or delay the video.\n`;
 }
 
+function sandboxBoundary(options: TaskAgentPromptOptions): string {
+  if (!options.importRename) return SANDBOX_BOUNDARY;
+  return SANDBOX_BOUNDARY.replace("Files keep their ORIGINAL names. Do not rename anything.", "This is a USER SHARE IMPORT: call renameImportedMedia on the final target videos BEFORE markObtained. It generates canonical title/year/episode filenames and verifies them. This explicit task-specific naming rule supersedes keep-original-name guidance in the general acquisition manual. Match companion subtitles to the new video basename. Never guess an ambiguous episode identity.");
+}
+
 export function buildTvAnimeSystemPrompt(options: TaskAgentPromptOptions): string {
-  return `${SANDBOX_BOUNDARY}
+  return `${sandboxBoundary(options)}
 
 ${skillMandate("tv")}
 ${rawSnapshotPointer(options)}${subtitleSnapshotPointer(options)}
@@ -207,7 +213,7 @@ ${LOOP_GUIDANCE}`;
 }
 
 export function buildMovieSystemPrompt(options: TaskAgentPromptOptions): string {
-  return `${SANDBOX_BOUNDARY}
+  return `${sandboxBoundary(options)}
 
 ${skillMandate("movie")}
 ${rawSnapshotPointer(options)}${subtitleSnapshotPointer(options)}

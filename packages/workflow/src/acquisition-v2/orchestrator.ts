@@ -104,6 +104,7 @@ export async function runAcquisitionV2(request: RunAcquisitionV2Request): Promis
   });
   const need = request.target.kind === "tv" ? needForTvTarget(request.target) : needForMovie();
   const sandbox = new TaskSandbox({
+    ...(request.provider.importNaming ? { importNaming: request.provider.importNaming } : {}),
     provider,
     storage,
     // Movie-only 中文字幕软兜底: 8+2 budget + last-resort raw landing (the prompt's
@@ -176,12 +177,13 @@ export async function runAcquisitionV2(request: RunAcquisitionV2Request): Promis
   }
 
   const common = {
+    importRename: sandbox.canRenameImportedMedia(),
     sandbox,
     model: request.model,
     ...(request.maxSteps === undefined ? {} : { maxSteps: request.maxSteps }),
     ...(request.preferredLanguage === undefined ? {} : { preferredLanguage: request.preferredLanguage }),
     ...(request.originCountries === undefined ? {} : { originCountries: request.originCountries }),
-    ...(request.searchHints === undefined ? {} : { searchHints: request.searchHints }),
+    ...((request.provider.acquisitionInstructions ?? request.searchHints) === undefined ? {} : { searchHints: request.provider.acquisitionInstructions ?? request.searchHints! }),
     ...(request.qualityGuidance === undefined ? {} : { qualityGuidance: request.qualityGuidance }),
     ...(request.storageProvider === undefined ? {} : { storageProvider: request.storageProvider }),
     ...(subtitleActive ? { subtitle: true } : {}),

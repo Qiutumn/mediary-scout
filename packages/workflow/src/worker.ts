@@ -1,4 +1,5 @@
 import type { LanguageModel } from "ai";
+import { suppliedShareProvider } from "./share-source.js";
 import type {
   AcquisitionSeasonScope,
   EpisodeState,
@@ -269,7 +270,7 @@ export async function handleWorkflowRunFailure(input: {
     title: claimed.title,
     season: claimed.season,
     workflowRun,
-    episodes: willRetry ? claimed.episodes : [],
+    episodes: willRetry || claimed.workflowRun.suppliedShare ? claimed.episodes : [],
     resourceSnapshots: willRetry ? claimed.resourceSnapshots : [],
     decisions: willRetry ? claimed.decisions : [],
     transferAttempts: willRetry ? claimed.transferAttempts : [],
@@ -313,17 +314,24 @@ export async function runQueuedType2Workflow(input: {
   if (!claimed) {
     return { status: "idle" };
   }
-  const deps = await resolveWorkerDeps(
-    input.resolveAccountContext,
-    claimed.accountId,
-    claimed.connectedStorageId,
-    input,
-  );
-
   try {
+    const deps = await resolveWorkerDeps(
+      input.resolveAccountContext,
+      claimed.accountId,
+      claimed.connectedStorageId,
+      input,
+    );
+    if (claimed.workflowRun.suppliedShare) {
+      if (deps.storageProvider && deps.storageProvider !== claimed.workflowRun.suppliedShare.provider) {
+        throw new Error("分享与目标网盘品牌不一致");
+      }
+      deps.resourceProvider = suppliedShareProvider(claimed.workflowRun.suppliedShare, claimed.title.title, claimed.title.year);
+    }
+
     const result = await runType2InitializationV2AndPersist({
       title: claimed.title,
       season: claimed.season,
+      ...(claimed.workflowRun.suppliedShare ? { priorObtained: claimed.episodes.filter(e => e.obtained).map(e => e.episodeCode) } : {}),
       categoryParentId: requireCategoryParent(
         storageParentForTitle(
           claimed.title,
@@ -352,6 +360,7 @@ export async function runQueuedType2Workflow(input: {
       // finishedAt is stamped post-run inside the persist step (see runner-v2),
       // so it reflects actual completion, not the claim time.
       workflowRun: {
+        ...(claimed.workflowRun.suppliedShare ? { suppliedShare: claimed.workflowRun.suppliedShare } : {}),
         id: claimed.workflowRun.id,
         startedAt: claimed.workflowRun.startedAt,
         finishedAt: null,
@@ -820,14 +829,20 @@ export async function runQueuedMovieAcquisition(input: {
   if (!claimed) {
     return { status: "idle" };
   }
-  const deps = await resolveWorkerDeps(
-    input.resolveAccountContext,
-    claimed.accountId,
-    claimed.connectedStorageId,
-    input,
-  );
-
   try {
+    const deps = await resolveWorkerDeps(
+      input.resolveAccountContext,
+      claimed.accountId,
+      claimed.connectedStorageId,
+      input,
+    );
+    if (claimed.workflowRun.suppliedShare) {
+      if (deps.storageProvider && deps.storageProvider !== claimed.workflowRun.suppliedShare.provider) {
+        throw new Error("分享与目标网盘品牌不一致");
+      }
+      deps.resourceProvider = suppliedShareProvider(claimed.workflowRun.suppliedShare, claimed.title.title, claimed.title.year);
+    }
+
     const result = await runMovieAcquisitionV2AndPersist({
       title: claimed.title,
       categoryParentId:
@@ -851,6 +866,7 @@ export async function runQueuedMovieAcquisition(input: {
         ? {}
         : { assrtToken: deps.assrtToken }),
       workflowRun: {
+        ...(claimed.workflowRun.suppliedShare ? { suppliedShare: claimed.workflowRun.suppliedShare } : {}),
         id: claimed.workflowRun.id,
         startedAt: claimed.workflowRun.startedAt,
         finishedAt: null,
@@ -902,20 +918,26 @@ export async function runQueuedSeriesInitialization(input: {
   if (!claimed) {
     return { status: "idle" };
   }
-  const deps = await resolveWorkerDeps(
-    input.resolveAccountContext,
-    claimed.accountId,
-    claimed.connectedStorageId,
-    input,
-  );
-
-  const queuedEvent = claimed.workflowRun.auditEvents.find(
-    (event) => event.type === "series_init_queued",
-  );
-  const seasons = (queuedEvent?.data?.["seasons"] ??
-    []) as AcquisitionSeasonScope[];
-
   try {
+    const deps = await resolveWorkerDeps(
+      input.resolveAccountContext,
+      claimed.accountId,
+      claimed.connectedStorageId,
+      input,
+    );
+    if (claimed.workflowRun.suppliedShare) {
+      if (deps.storageProvider && deps.storageProvider !== claimed.workflowRun.suppliedShare.provider) {
+        throw new Error("分享与目标网盘品牌不一致");
+      }
+      deps.resourceProvider = suppliedShareProvider(claimed.workflowRun.suppliedShare, claimed.title.title, claimed.title.year);
+    }
+
+    const queuedEvent = claimed.workflowRun.auditEvents.find(
+      (event) => event.type === "series_init_queued",
+    );
+    const seasons = (queuedEvent?.data?.["seasons"] ??
+      []) as AcquisitionSeasonScope[];
+
     if (seasons.length === 0) {
       throw new Error(
         "Queued series initialization run is missing its season metadata",
@@ -951,6 +973,7 @@ export async function runQueuedSeriesInitialization(input: {
         ? {}
         : { assrtToken: deps.assrtToken }),
       workflowRun: {
+        ...(claimed.workflowRun.suppliedShare ? { suppliedShare: claimed.workflowRun.suppliedShare } : {}),
         id: claimed.workflowRun.id,
         startedAt: claimed.workflowRun.startedAt,
         finishedAt: null,

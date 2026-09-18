@@ -12,6 +12,7 @@ import type { SimTreeFile, StorageV2, TransferAttemptResult } from "./storage-11
 import { isSystemicTransferBlockMessage } from "./transfer-block.js";
 import { animeSearchTabooWarnings, type SearchProfile } from "./search-profile.js";
 import type { AuditEvent } from "../domain.js";
+import { importMediaName } from "../import-media-name.js";
 import { isMergedSourceEvidenceUsable, type MergedSourceHealth } from "../resource-source-health.js";
 
 /** Quality / subtitle / source tokens that PanSou share titles almost never carry,
@@ -76,6 +77,7 @@ function stripQualitySubtitleTokens(keyword: string): { keyword: string; strippe
  * This file grows one tool at a time (TDD). First tool: searchResources.
  */
 export interface TaskSandboxOptions {
+  importNaming?: { title: string; year: number };
   provider: ResourceProviderV2;
   /** Max distinct PanSou searches per task (the system's search budget). */
   searchBudget?: number;
@@ -151,6 +153,7 @@ export interface TransferToolResult {
 }
 
 export class TaskSandbox {
+  private readonly importNaming: TaskSandboxOptions["importNaming"];
   private readonly provider: ResourceProviderV2;
   private readonly searchBudget: number;
   private readonly storage: StorageV2 | undefined;
@@ -190,6 +193,7 @@ export class TaskSandbox {
   private readonly auditEvents: AuditEvent[] = [];
 
   constructor(options: TaskSandboxOptions) {
+    this.importNaming = options.importNaming;
     this.provider = options.provider;
     this.subtitleFallback = options.subtitleFallback ?? false;
     // Movie 8+2: default to MOVIE_SEARCH_BUDGET (10) with a reserve at 8 when the
@@ -207,6 +211,58 @@ export class TaskSandbox {
     this.need = options.need ?? [];
     this.titleTerms = options.titleTerms ?? [];
     this.subtitleProvider = options.subtitleProvider;
+  }
+
+  canRenameImportedMedia(): boolean { return this.importNaming !== undefined; }
+
+  /** Only final, flat videos in this task's target directories may be renamed.
+   * Validate the whole batch before mutation; confirm actual names afterwards. */
+  async renameImportedMedia(input: { files: Array<{ fileId: string; season?: number; episode?: number }> }) {
+    if (!this.importNaming || !this.storage) throw new Error("Import renaming is disabled");
+    if (!input.files.length || input.files.length > 1000) throw new Error("Empty/oversized rename batch");
+    const listings = new Map<string, SimTreeFile[]>();
+    for (const dir of this.allTargetDirIds()) listings.set(dir, await this.storage.listTree({ directoryId: dir }));
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const plan = input.files.map(item => {
+      const dir = this.resolveTargetDir(item.season);
+      if (!dir) throw new Error("Episode is outside this task's target seasons");
+      const files = listings.get(dir)!;
+      const file = files.find(f => f.id === item.fileId);
+      if (!file?.isVideo || file.path.includes("/")) throw new Error("Video must be moved/flattened into the target first");
+      if (seenIds.has(file.id)) throw new Error("Duplicate file identity");
+      seenIds.add(file.id);
+      const name = importMediaName({ ...this.importNaming!, originalName: file.path, ...(item.season === undefined ? {} : { season: item.season }), ...(item.episode === undefined ? {} : { episode: item.episode }) });
+      const key = `${dir}/${name.toLowerCase()}`;
+      if (seenNames.has(key) || files.some(f => f.id !== file.id && f.path.toLowerCase() === name.toLowerCase())) throw new Error("Canonical filename collision: deduplicate based on actual files first");
+      seenNames.add(key);
+      return { fileId: file.id, directoryId: dir, newName: name, oldName: file.path };
+    });
+    // Preserve matching sidecar subtitles, including language suffixes (.zh.ass).
+    for (const video of [...plan]) {
+      const oldStem = video.oldName.replace(/\.[^.]+$/, "");
+      const newStem = video.newName.replace(/\.[^.]+$/, "");
+      for (const subtitle of listings.get(video.directoryId)!) {
+        if (!subtitle.isSubtitle || subtitle.path.includes("/") || !subtitle.path.startsWith(`${oldStem}.`)) continue;
+        const name = newStem + subtitle.path.slice(oldStem.length);
+        const key = `${video.directoryId}/${name.toLowerCase()}`;
+        if (seenNames.has(key) || listings.get(video.directoryId)!.some(f => f.id !== subtitle.id && f.path.toLowerCase() === name.toLowerCase())) throw new Error("Subtitle filename collision");
+        seenNames.add(key);
+        plan.push({ fileId: subtitle.id, directoryId: video.directoryId, newName: name, oldName: subtitle.path });
+      }
+    }
+    for (const item of plan) {
+      if (item.oldName !== item.newName) await this.storage.renameFile(item);
+    }
+    const actual = new Map<string, SimTreeFile[]>();
+    for (const dir of new Set(plan.map(p => p.directoryId))) actual.set(dir, await this.storage.listTree({ directoryId: dir }));
+    const renamed: Array<{ fileId: string; name: string }> = [];
+    for (const item of plan) {
+      if (actual.get(item.directoryId)!.find(f => f.id === item.fileId)?.path !== item.newName) throw new Error("Rename did not persist; task cannot be marked complete");
+      renamed.push({ fileId: item.fileId, name: item.newName });
+      this.auditEvents.push({ type: "import_media_renamed", message: `${item.oldName} → ${item.newName}`, data: { fileId: item.fileId } });
+    }
+    return { renamed };
   }
 
   /** Every scoped target directory (all seasons + the movie) — the union used for
@@ -656,6 +712,19 @@ export class TaskSandbox {
    *  not a system gate that costs extra 115 reads. No fileId↔episode map (§1.13):
    *  the code IS the unit; the agent names what it judged present. */
   async markObtained(input: { codes: string[]; subtitleFallback?: boolean }): Promise<{ confirmed: string[] }> {
+    if (this.importNaming && this.storage) {
+      const listings = new Map<string, SimTreeFile[]>();
+      for (const code of input.codes) {
+        const match = /^S(\d+)E(\d+)$/.exec(code);
+        const season = match ? Number(match[1]) : undefined;
+        const episode = match ? Number(match[2]) : undefined;
+        const dir = this.resolveTargetDir(season);
+        if (!dir || (!match && code !== "MOVIE")) throw new Error("Invalid import coverage code");
+        if (!listings.has(dir)) listings.set(dir, await this.storage.listTree({ directoryId: dir }));
+        const canonical = listings.get(dir)!.some(f => f.isVideo && !f.path.includes("/") && f.path === importMediaName({ ...this.importNaming!, originalName: f.path, ...(season === undefined ? {} : { season, episode: episode! }) }));
+        if (!canonical) throw new Error(`Rename and verify ${code} with renameImportedMedia before marking it obtained`);
+      }
+    }
     for (const code of input.codes) {
       this.obtainedCodes.add(code);
     }

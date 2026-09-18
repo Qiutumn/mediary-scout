@@ -24,7 +24,7 @@ export interface AcquireResult {
  */
 export async function acquireMedia(input: AcquireInput, accountId: string): Promise<AcquireResult> {
   if (input.tmdbId) {
-    return queueByTmdbId(input.tmdbId, input.type ?? "tv", input.season, input.storageId);
+    return queueByTmdbId(accountId, input.tmdbId, input.type ?? "tv", input.season, input.storageId);
   }
 
   const provider = await getTmdbSearchProvider(accountId);
@@ -80,13 +80,14 @@ export async function acquireMedia(input: AcquireInput, accountId: string): Prom
     };
   }
 
-  return queueByTmdbId(top.candidate.tmdbId, top.candidate.mediaType, input.season, input.storageId, {
+  return queueByTmdbId(accountId, top.candidate.tmdbId, top.candidate.mediaType, input.season, input.storageId, {
     title: top.candidate.title,
     year: top.candidate.year,
   });
 }
 
 async function queueByTmdbId(
+  accountId: string,
   tmdbId: number,
   type: "tv" | "movie",
   season: number | null | undefined,
@@ -99,7 +100,7 @@ async function queueByTmdbId(
   const candidateId =
     type === "movie" ? `tmdb_movie_${tmdbId}` : `tmdb_tv_${tmdbId}_s${season ?? 1}`;
 
-  const result = await queueCandidateTracking(candidateId, storageId ?? undefined);
+  const result = await queueCandidateTracking(candidateId, storageId ?? undefined, accountId);
 
   const matched = {
     tmdbId,

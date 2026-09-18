@@ -121,6 +121,7 @@ async function persistSingleSeason(input: {
     title: input.title,
     season: seasonResult.season,
     workflowRun: {
+      ...(input.workflowRun.suppliedShare ? { suppliedShare: input.workflowRun.suppliedShare } : {}),
       id: input.workflowRun.id,
       kind: input.kind,
       status: input.bridged.status,
@@ -138,12 +139,13 @@ async function persistSingleSeason(input: {
 }
 
 export async function runType2InitializationV2AndPersist(
-  input: TvV2Common & { season: TrackedSeason },
+  input: TvV2Common & { season: TrackedSeason; priorObtained?: string[] },
 ): Promise<BridgedV2Result> {
   const now = resolveNow(input);
   const bridged = await runTvAcquisitionV2({
     title: input.title,
     mode: "type2",
+    ...(input.priorObtained ? { priorObtained: input.priorObtained } : {}),
     seasons: [
       {
         seasonNumber: input.season.seasonNumber,
@@ -362,6 +364,7 @@ export async function runMovieAcquisitionV2AndPersist(input: {
     title: input.title,
     season: result.season,
     workflowRun: {
+      ...(input.workflowRun.suppliedShare ? { suppliedShare: input.workflowRun.suppliedShare } : {}),
       id: input.workflowRun.id,
       kind: "movie_init",
       status: result.status,

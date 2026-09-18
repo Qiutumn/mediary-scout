@@ -13,7 +13,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint . --max-warnings 0",
+    "dev:setup": "python3 scripts/dev-setup.py",
+    "dev:local": "npm run build:workflow && node scripts/dev-local.mjs",
+    "deploy:orb": "sh scripts/deploy-orb.sh"
   },
   "engines": {
     "node": ">=22.13.0"

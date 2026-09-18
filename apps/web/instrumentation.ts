@@ -29,4 +29,6 @@ export async function register(): Promise<void> {
   await runStartupMigrations();
   const { startBackgroundWorker } = await import("./lib/background-worker");
   startBackgroundWorker();
+  const { startTelegramBot } = await import("./lib/telegram-bot");
+  await startTelegramBot();
 }

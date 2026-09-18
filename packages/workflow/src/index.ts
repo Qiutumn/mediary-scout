@@ -70,3 +70,4 @@ export * from "./acquisition-v2/workflow-v2-bridge.js";
 export * from "./acquisition-v2/run-tv-v2.js";
 export * from "./acquisition-v2/stub-model.js";
 export * from "./runner-v2.js";
+export * from "./share-source.js";

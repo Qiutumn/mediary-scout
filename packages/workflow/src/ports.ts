@@ -7,6 +7,9 @@ import type {
 } from "./domain.js";
 
 export interface ResourceProvider {
+  /** Trusted provider policy, never copied from user link/file text. */
+  acquisitionInstructions?: string;
+  importNaming?: { title: string; year: number };
   /**
    * `workflowRunId`, when given, namespaces the returned snapshot/candidate ids
    * to that run. Content-hashing providers (PanSou) otherwise yield the SAME id

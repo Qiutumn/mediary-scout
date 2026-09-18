@@ -1,0 +1,21 @@
+# Isolated from production: different Compose project, volume and host ports.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mediatrack
+      POSTGRES_USER: mediatrack
+      POSTGRES_PASSWORD: mediatrack
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["dev-pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediatrack -d mediatrack"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  pansou:
+    image: ghcr.io/fish2018/pansou-web:latest
+    env_file: deploy/pansou.channels.env
+    ports: ["127.0.0.1:8089:80"]
+volumes:
+  dev-pgdata:

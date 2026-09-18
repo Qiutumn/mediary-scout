@@ -225,6 +225,13 @@ export function buildSandboxToolSet(
         asEvidence(() => sandbox.renameSubtitle(args)),
     };
   }
+  if (sandbox.canRenameImportedMedia()) {
+    tools["renameImportedMedia"] = {
+      description: "Share-import ONLY: after moveToSeason/flattenMovie and deduplication, rename ALL target video files in ONE BATCH using their verified identities. Movie: fileId only. TV: fileId, season, episode from actual filename/content evidence. The server generates canonical Title (Year) - SxxExx.ext names and verifies them. Do this BEFORE markObtained. Never guess ambiguous identities or rename extras/other titles. Filename collisions are refused; choose the correct file first.",
+      inputSchema: z.object({ files: z.array(z.object({ fileId: z.string(), season: z.number().int().positive().optional(), episode: z.number().int().positive().optional() })).min(1).max(1000) }),
+      execute: (args: { files: Array<{ fileId: string; season?: number; episode?: number }> }) => asEvidence(() => sandbox.renameImportedMedia(args)),
+    };
+  }
   const toolSet = tools as ToolSet;
   return wrapTools(toolSet, {
     ...(options.onToolCall ? { onToolCall: options.onToolCall } : {}),

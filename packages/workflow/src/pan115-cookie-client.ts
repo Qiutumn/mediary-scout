@@ -183,6 +183,19 @@ export class Pan115CookieClient implements Pan115StorageApi {
     return stringValue(recordValue(response, "cid")) === directoryId;
   }
 
+  /** Read-only share preview; never follows the user URL or sends cookies to it. */
+  async previewShare(input: { shareCode: string; receiveCode: string }): Promise<string[]> {
+    const response = await this.getJson(`${PAN115_WEBAPI_BASE_URL}/share/snap`, [
+      ["share_code", input.shareCode], ["receive_code", input.receiveCode],
+      ["cid", "0"], ["offset", "0"], ["limit", "50"],
+    ]);
+    if (recordValue(response, "state") !== true) throw new Error("115 分享不可用或提取码错误");
+    const data = recordValue(response, "data");
+    const name = stringValue(recordValue(recordValue(data, "shareinfo"), "share_title"));
+    const names = arrayValue(recordValue(data, "list")).map(item => stringValue(recordValue(item, "n"))).filter(Boolean);
+    return names.length ? names : name ? [name] : [];
+  }
+
   async receiveShare(input: {
     shareCode: string;
     receiveCode: string;
