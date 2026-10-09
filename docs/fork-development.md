@@ -72,6 +72,29 @@ TELEGRAM_ALLOWED_USER_IDS=<数字用户 ID，逗号分隔>
 
 消息 offset、处理回执、候选和完成通知订阅保存在账号设置中，重启恢复；消息回复与完成通知是至少一次投递，极小的「发送成功但保存前崩溃」窗口可能重复通知，但相同分享不会重复入队。分享任务失败后可从网页活动页或 agent retry 接口重试。修改白名单后需重建 web 容器，已移除用户不再收到完成通知。
 
+## Telegram 话题网关
+
+已有 Telegram 话题网关时，给本应用单独注册 `virtual` 应用与话题。真实 Bot Token 留在网关，本服务仅持有该应用 token。网关不会自动执行本服务的用户白名单，入口仍验证真实 `from.id`，并拒绝匿名 `sender_chat`、未知话题、缺少身份和机器人消息。
+
+```dotenv
+TELEGRAM_ENABLED=1
+TELEGRAM_MODE=gateway
+TELEGRAM_API_ROOT=http://host.docker.internal:18765
+TELEGRAM_BOT_TOKEN=<本应用的网关 token>
+TELEGRAM_ALLOWED_USER_IDS=<允许的真实用户 ID>
+TELEGRAM_ALLOWED_CHAT_IDS=<绑定返回的 app_chat_id，多个用逗号分隔>
+```
+
+Mac 原生进程使用 `http://127.0.0.1:18765`，OrbStack 容器使用经实际探测的 `host.docker.internal`。网关请求使用独立直连 dispatcher，绕过环境代理，读取超时为 95 秒。应用只运行一个 poller，保留积压；不要用诊断脚本额外调用 getUpdates。
+
+在绑定话题中使用 `/help`、`/drives`、`/get`、`/import`、`/choose`、`/status`，直接发送分享链接也可。回复和完成通知返回原虚拟 chat_id；候选会话按话题和真实用户隔离。用户或话题从白名单移除后，不再发送该订阅的通知。当前仅处理新消息及文字说明，不支持按钮回调或编辑消息触发业务。
+
+网关和原私聊 Bot 使用不同的持久状态命名空间；旧 offset、候选和通知订阅保留，切换后不会把原私聊记录发到群话题。旧 Bot 的 file_id、会话和未完成通知不自动迁移。回退时恢复原 `.env` 的私聊模式/token 并重建 web 容器。
+
+若网关返回 `UPSTREAM_RESULT_UNKNOWN` 或发送请求的连接结果不明，保存 `deliveryUncertain` 和可用的 `gateway_request_id`，停止自动重发该条回复/通知；继续接收后续消息。应先在网关发送记录中按 request ID 核对，不能盲目重试。业务任务回执已持久化，用户可用 `/status` 获取最新结果。明确尚未发出的 `UPSTREAM_CONNECT_FAILED` 会保留请求编号，按原轮询机制稍后重试。网关内部命令可注册后用 `/gw_commands` 查看。
+
+接入验证分为容器网络、应用凭据、鉴权/话题隔离测试和真实交互；前两项通过不能代替用户在话题发送命令后的实际回包验证。
+
 ## 分享导入 API / Skill
 
 `.env` 设置随机 `MEDIA_TRACK_AGENT_TOKEN` 启用 API。连接文件 `{ "baseUrl": "http://127.0.0.1:3000", "token": "…" }` 可保存为 `~/.mediary-scout/agent.json`（0600）。Skill 位于 `skills/mediary-share-import`，可复制到 `~/.codex/skills/mediary-share-import`。
